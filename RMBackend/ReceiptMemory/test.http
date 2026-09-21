@@ -1,0 +1,10 @@
+POST http://localhost:8080/api/purchases
+Content-Type: application/json
+
+{
+  "productName": "Sony Headphones",
+  "storeName": "Croma",
+  "price": 4999,
+  "purchaseDate": "2026-09-20",
+  "warrantyMonths": 12
+}
