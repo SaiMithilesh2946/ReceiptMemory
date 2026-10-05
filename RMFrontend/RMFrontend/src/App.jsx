@@ -1,391 +1,373 @@
-import { useEffect, useState,useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import "./App.css";
+import {
+  buildReceiptUrl,
+  createPurchase,
+  deletePurchase,
+  fetchPurchases,
+  updatePurchase,
+} from "./api/purchaseApi";
+import DashboardStats from "./components/DashboardStats";
+import Header from "./components/Header";
+import PurchaseCard from "./components/PurchaseCard";
+import PurchaseForm from "./components/PurchaseForm";
+import SearchBar from "./components/SearchBar";
+import WarrantySection from "./components/WarrantySection";
+import ReceiptModal from "./components/ReceiptModal";
+import ConfirmDialog from "./components/ConfirmDialog";
+import EmptyState from "./components/EmptyState";
+
+const initialForm = {
+  productName: "",
+  storeName: "",
+  price: "",
+  purchaseDate: "",
+  warrantyMonths: "",
+};
+
+function getWarrantySnapshot(purchase) {
+  const purchaseDate = new Date(purchase.purchaseDate);
+  const warrantyMonths = Number(purchase.warrantyMonths || 0);
+
+  if (Number.isNaN(purchaseDate.getTime())) {
+    return {
+      expiryDate: new Date(),
+      daysLeft: 0,
+    };
+  }
+
+  const expiryDate = new Date(purchaseDate);
+  expiryDate.setMonth(expiryDate.getMonth() + warrantyMonths);
+  expiryDate.setHours(0, 0, 0, 0);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const timeDifference = expiryDate.getTime() - today.getTime();
+  const daysLeft = Math.ceil(timeDifference / (1000 * 60 * 60 * 24));
+
+  return {
+    expiryDate,
+    daysLeft,
+  };
+}
 
 function App() {
-  const [productName, setProductName] = useState("");
-  const [storeName, setStoreName] = useState("");
-  const [price, setPrice] = useState("");
-  const [purchaseDate, setPurchaseDate] = useState("");
-  const [warrantyMonths, setWarrantyMonths] = useState("");
-  const [receiptImage, setReceiptImage] = useState(null);
   const [purchases, setPurchases] = useState([]);
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
-  const formRef = useRef(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [formValues, setFormValues] = useState(initialForm);
+  const [formErrors, setFormErrors] = useState({});
+  const [receiptFile, setReceiptFile] = useState(null);
+  const [receiptPreview, setReceiptPreview] = useState("");
+  const [existingReceiptImage, setExistingReceiptImage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [selectedReceipt, setSelectedReceipt] = useState(null);
+  const formSectionRef = useRef(null);
 
-  // Load purchases when the website opens
+  const resetForm = () => {
+    setFormValues(initialForm);
+    setFormErrors({});
+    setEditingId(null);
+    setReceiptFile(null);
+    setReceiptPreview("");
+    setExistingReceiptImage("");
+  };
+
   useEffect(() => {
-    async function loadPurchases() {
-      const response = await fetch(
-        "http://localhost:8080/api/purchases"
-      );
-
-      const data = await response.json();
-
-      setPurchases(data);
-    }
+    const loadPurchases = async () => {
+      try {
+        setLoading(true);
+        const data = await fetchPurchases();
+        setPurchases(data);
+        setErrorMessage("");
+      } catch (error) {
+        setErrorMessage(error.message || "Unable to load purchases.");
+      } finally {
+        setLoading(false);
+      }
+    };
 
     loadPurchases();
   }, []);
 
-  // Add a new purchase
- async function handleSubmit(e) {
-  e.preventDefault();
-
-  const purchase = {
-  productName,
-  storeName,
-  price: Number(price),
-  purchaseDate,
-  warrantyMonths: Number(warrantyMonths)
-};
-
-const formData = new FormData();
-
-formData.append(
-  "purchase",
-  new Blob([JSON.stringify(purchase)], {
-    type: "application/json"
-  })
-);
-
-if (receiptImage) {
-  formData.append("receipt", receiptImage);
-}
-
-  if (editingId !== null) {
-    const response = await fetch(
-  `http://localhost:8080/api/purchases/${editingId}`,
-  {
-    method: "PUT",
-    body: formData
-  }
-);
-
-    const updatedPurchase = await response.json();
-
-    setPurchases((previousPurchases) =>
-      previousPurchases.map((item) =>
-        item.id === editingId
-          ? updatedPurchase
-          : item
-      )
-    );
-
-    setEditingId(null);
-  } else {
-   const response = await fetch(
-  "http://localhost:8080/api/purchases",
-  {
-    method: "POST",
-    body: formData
-  }
-);
-
-    const result = await response.json();
-
-    setPurchases((previousPurchases) => [
-      ...previousPurchases,
-      result
-    ]);
-  }
-}
-  // Search purchases
-  const filteredPurchases = purchases.filter((purchase) =>
-    purchase.productName
-      .toLowerCase()
-      .startsWith(search.toLowerCase())
+  const enrichedPurchases = useMemo(
+    () =>
+      purchases.map((purchase) => ({
+        ...purchase,
+        ...getWarrantySnapshot(purchase),
+      })),
+    [purchases]
   );
 
-  // Calculate warranty information
-  constconst re warrantyInfo = purchases.map((purchase) => {
-    const expiryDate = new Date(purchase.purchaseDate);
+  const filteredPurchases = useMemo(() => {
+    const query = search.trim().toLowerCase();
 
-    expiryDate.setMonth(
-      expiryDate.getMonth() + purchase.warrantyMonths
-    );
+    if (!query) {
+      return enrichedPurchases;
+    }
 
-    const today = new Date();
+    return enrichedPurchases.filter((purchase) => {
+      const product = (purchase.productName || "").toLowerCase();
+      const store = (purchase.storeName || "").toLowerCase();
+      return (
+        product.startsWith(query) ||
+        store.startsWith(query) ||
+        product.includes(query) ||
+        store.includes(query)
+      );
+    });
+  }, [enrichedPurchases, search]);
 
-    // Remove time from today's date
-    today.setHours(0, 0, 0, 0);
+  const totalSpent = enrichedPurchases.reduce((sum, purchase) => sum + Number(purchase.price || 0), 0);
+  const activeWarranties = enrichedPurchases.filter((purchase) => purchase.daysLeft > 30).length;
+  const expiringSoon = enrichedPurchases.filter((purchase) => purchase.daysLeft >= 0 && purchase.daysLeft <= 30).length;
+  const upcomingWarranties = enrichedPurchases.filter((purchase) => purchase.daysLeft >= 0 && purchase.daysLeft <= 30);
+  const expiredWarranties = enrichedPurchases.filter((purchase) => purchase.daysLeft < 0);
 
-    // Remove time from expiry date
-    expiryDate.setHours(0, 0, 0, 0);
+  const validateForm = (values) => {
+    const nextErrors = {};
 
-    const difference =
-      expiryDate.getTime() - today.getTime();
+    if (!values.productName.trim()) {
+      nextErrors.productName = "Product name is required.";
+    }
 
-    const daysLeft = Math.ceil(
-      difference / (1000 * 60 * 60 * 24)
-    );
+    if (!values.storeName.trim()) {
+      nextErrors.storeName = "Store name is required.";
+    }
 
-    return {
-      ...purchase,
-      expiryDate,
-      daysLeft
+    if (values.price === "" || Number(values.price) < 0) {
+      nextErrors.price = "Price must be 0 or greater.";
+    }
+
+    if (!values.purchaseDate) {
+      nextErrors.purchaseDate = "Purchase date is required.";
+    }
+
+    if (values.warrantyMonths === "" || Number(values.warrantyMonths) < 0) {
+      nextErrors.warrantyMonths = "Warranty months must be 0 or greater.";
+    }
+
+    return nextErrors;
+  };
+
+  const handleFieldChange = (field, value) => {
+    setFormValues((previousForm) => ({
+      ...previousForm,
+      [field]: value,
+    }));
+
+    setFormErrors((previousErrors) => ({
+      ...previousErrors,
+      [field]: "",
+    }));
+  };
+
+  const handleFileChange = (event) => {
+    const selectedFile = event.target.files?.[0];
+
+    if (!selectedFile) {
+      setReceiptFile(null);
+      setReceiptPreview("");
+      return;
+    }
+
+    setReceiptFile(selectedFile);
+    setReceiptPreview(URL.createObjectURL(selectedFile));
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const validationErrors = validateForm(formValues);
+
+    if (Object.keys(validationErrors).length > 0) {
+      setFormErrors(validationErrors);
+      setErrorMessage("Please check the highlighted fields.");
+      return;
+    }
+
+    const payload = {
+      productName: formValues.productName.trim(),
+      storeName: formValues.storeName.trim(),
+      price: Number(formValues.price),
+      purchaseDate: formValues.purchaseDate,
+      warrantyMonths: Number(formValues.warrantyMonths),
     };
-  });
 
-  // Warrants expiring within 30 days
-  const upcomingWarranties = warrantyInfo.filter(
-    (purchase) =>
-      purchase.daysLeft >= 0 &&
-      purchase.daysLeft <= 30
-  );
+    if (editingId !== null) {
+      payload.receiptImage = existingReceiptImage || "";
+    }
 
-  // Already expired warranties
-  const expiredWarranties = warrantyInfo.filter(
-    (purchase) => purchase.daysLeft < 0
-  );
+    try {
+      setSaving(true);
+      setErrorMessage("");
+
+      if (editingId !== null) {
+        const updatedPurchase = await updatePurchase(editingId, payload, receiptFile);
+        setPurchases((previousPurchases) =>
+          previousPurchases.map((purchase) => (purchase.id === editingId ? updatedPurchase : purchase))
+        );
+      } else {
+        const createdPurchase = await createPurchase(payload, receiptFile);
+        setPurchases((previousPurchases) => [createdPurchase, ...previousPurchases]);
+      }
+
+      resetForm();
+    } catch (error) {
+      setErrorMessage(error.message || "Unable to save purchase.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEditClick = (purchase) => {
+    setEditingId(purchase.id);
+    setFormValues({
+      productName: purchase.productName,
+      storeName: purchase.storeName,
+      price: Number(purchase.price).toString(),
+      purchaseDate: purchase.purchaseDate,
+      warrantyMonths: String(purchase.warrantyMonths),
+    });
+    setExistingReceiptImage(purchase.receiptImage || "");
+    setReceiptFile(null);
+    setReceiptPreview(purchase.receiptImage ? buildReceiptUrl(purchase.receiptImage) : "");
+    setFormErrors({});
+    setErrorMessage("");
+    formSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleDeletePurchase = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    try {
+      setDeletingId(deleteTarget.id);
+      setErrorMessage("");
+      await deletePurchase(deleteTarget.id);
+      setPurchases((previousPurchases) => previousPurchases.filter((purchase) => purchase.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (error) {
+      setErrorMessage(error.message || "Unable to delete purchase.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    resetForm();
+  };
+
+  if (loading) {
+    return (
+      <div className="app-shell">
+        <Header />
+        <div className="loading-screen" aria-live="polite">Loading purchases...</div>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <h1>Receipt Memory</h1>
+    <div className="app-shell">
+      <Header />
 
-      <p>
-        Remember what you bought, where you bought it, and when.
-      </p>
-
-      {/* UPCOMING WARRANTY REMINDER */}
-
-      {upcomingWarranties.length > 0 && (
-        <div className="warranty-alert">
-          <h2>⚠️ Warranty Reminder</h2>
-
-          {upcomingWarranties.map((purchase) => (
-            <p key={purchase.id}>
-              <strong>{purchase.productName}</strong> —{" "}
-              {purchase.daysLeft} days left
-            </p>
-          ))}
+      {errorMessage && (
+        <div className="notice error" role="alert">
+          {errorMessage}
         </div>
       )}
 
-      {/* EXPIRED WARRANTIES */}
-
-      {expiredWarranties.length > 0 && (
-        <div className="warranty-alert">
-          <h2>🔴 Expired Warranties</h2>
-
-          {expiredWarranties.map((purchase) => (
-            <p key={purchase.id}>
-              <strong>{purchase.productName}</strong> —{" "}
-              Warranty expired{" "}
-              {Math.abs(purchase.daysLeft)} days ago
-            </p>
-          ))}
-        </div>
-      )}
-
-      {/* ADD PURCHASE */}
-
-      <h2>Add Purchase</h2>
-
-      <form ref={formRef} onSubmit={handleSubmit}>
-        <div>
-          <label>Product Name</label>
-          <br />
-
-          <input
-            type="text"
-            value={productName}
-            onChange={(e) =>
-              setProductName(e.target.value)
-            }
-          />
-        </div>
-
-        <br />
-
-        <div>
-          <label>Store Name</label>
-          <br />
-
-          <input
-            type="text"
-            value={storeName}
-            onChange={(e) =>
-              setStoreName(e.target.value)
-            }
-          />
-        </div>
-
-        <br />
-
-        <div>
-  <label>Price</label>
-  <br />
-
-  <input
-    type="number"
-    value={price}
-    onChange={(e) =>
-      setPrice(e.target.value)
-    }
-  />
-</div>
-
-<br />
-
-<div>
-  <label>Receipt Image</label>
-  <br />
-
-  <input
-    type="file"
-    accept="image/*"
-    onChange={(e) => setReceiptImage(e.target.files[0])}
-  />
-   {receiptImage && (
-    <p>Selected: {receiptImage.name}</p>
-  )}
-</div>
-
-        <br />
-
-        <div>
-          <label>Purchase Date</label>
-          <br />
-
-          <input
-            type="date"
-            value={purchaseDate}
-            onChange={(e) =>
-              setPurchaseDate(e.target.value)
-            }
-          />
-        </div>
-
-        <br />
-
-        <div>
-          <label>Warranty (months)</label>
-          <br />
-
-          <input
-            type="number"
-            value={warrantyMonths}
-            onChange={(e) =>
-              setWarrantyMonths(e.target.value)
-            }
-          />
-        </div>
-
-        <br />
-
-        <button type="submit">
-  {editingId !== null ? "Update Purchase" : "Save Purchase"}
-</button>
-
-{editingId !== null && (
-  <button
-    type="button"
-    onClick={() => {
-      setEditingId(null);
-      setProductName("");
-      setStoreName("");
-      setPrice("");
-      setPurchaseDate("");
-      setWarrantyMonths("");
-    }}
-  >
-    Cancel Edit
-  </button>
-)}
-      </form>
-
-      {/* SEARCH */}
-
-      <input
-        type="text"
-        placeholder="Search your purchases..."
-        value={search}
-        onChange={(e) =>
-          setSearch(e.target.value)
-        }
+      <DashboardStats
+        stats={{
+          totalPurchases: enrichedPurchases.length,
+          totalSpent,
+          activeWarranties,
+          expiringSoon,
+        }}
       />
 
-      {/* PURCHASE LIST */}
+      <section id="warranty" className="warranty-layout" aria-label="Warranty overview">
+        <WarrantySection title="Expiring Soon" tone="warning" items={upcomingWarranties} />
+        <WarrantySection title="Expired" tone="danger" items={expiredWarranties} />
+        <WarrantySection title="Active" tone="success" items={enrichedPurchases.filter((purchase) => purchase.daysLeft > 30)} />
+      </section>
 
-      <h2>My Purchases</h2>
+      <div className="content-grid">
+        <div ref={formSectionRef}>
+          <PurchaseForm
+            formValues={formValues}
+            onFieldChange={handleFieldChange}
+            onSubmit={handleSubmit}
+            onCancelEdit={handleCancelEdit}
+            editingId={editingId}
+            isSubmitting={saving}
+            selectedFile={receiptFile}
+            previewImage={receiptPreview}
+            onFileChange={handleFileChange}
+            errors={formErrors}
+          />
+        </div>
 
-      <div className="purchase-list">
-        {filteredPurchases.map((purchase) => (
-          <div
-            className="purchase-card"
-            key={purchase.id}
-          >
-            <h3>{purchase.productName}</h3>
-
-            <p>
-              <strong>Store:</strong>{" "}
-              {purchase.storeName}
-            </p>
-
-            <p>
-              <strong>Price:</strong>{" "}
-              ₹{purchase.price}
-            </p>
-
-            <p>
-              <strong>Purchased:</strong>{" "}
-              {purchase.purchaseDate}
-            </p>
-
-            <p>
-              <strong>Warranty:</strong>{" "}
-              {purchase.warrantyMonths} months
-            </p>
-
-            <p>
-  <strong>Warranty expires:</strong>{" "}
-  {new Date(
-    new Date(purchase.purchaseDate).setMonth(
-      new Date(purchase.purchaseDate).getMonth() +
-        purchase.warrantyMonths
-    )
-  ).toLocaleDateString()}
-</p>
-
-<button
-  onClick={() => {
-    setProductName(purchase.productName);
-    setStoreName(purchase.storeName);
-    setPrice(purchase.price);
-    setPurchaseDate(purchase.purchaseDate);
-    setWarrantyMonths(purchase.warrantyMonths);
-    setEditingId(purchase.id);
-
-    formRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start"
-    });
-  }}
->
-  Edit
-</button>
-
-<button
-  onClick={async () => {
-    await fetch(
-      `http://localhost:8080/api/purchases/${purchase.id}`,
-      {
-        method: "DELETE"
-      }
-    );
-
-    setPurchases((previousPurchases) =>
-      previousPurchases.filter(
-        (item) => item.id !== purchase.id
-      )
-    );
-  }}
->
-  Delete
-</button>
+        <section className="purchase-panel" aria-live="polite">
+          <div className="panel-header purchase-header-row">
+            <div className="panel-title-wrap">
+              <span className="form-icon" aria-hidden="true">▣</span>
+              <h2>Purchases</h2>
+            </div>
           </div>
-        ))}
+
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            onClear={() => setSearch("")}
+          />
+
+          {filteredPurchases.length === 0 ? (
+            search.trim() ? (
+              <div className="empty-state compact" role="status" aria-live="polite">
+                <div className="empty-icon" aria-hidden="true">🔎</div>
+                <h3>No purchases found</h3>
+                <p>Try a different product name or store name.</p>
+              </div>
+            ) : (
+              <EmptyState onAddPurchase={() => formSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
+            )
+          ) : (
+            <div className="purchase-grid">
+              {filteredPurchases.map((purchase) => (
+                <PurchaseCard
+                  key={purchase.id}
+                  purchase={purchase}
+                  onEdit={handleEditClick}
+                  onDelete={(item) => setDeleteTarget(item)}
+                  onOpenReceipt={(imageUrl, title) => setSelectedReceipt({ imageUrl, title })}
+                />
+              ))}
+            </div>
+          )}
+        </section>
       </div>
+
+      <ReceiptModal
+        imageUrl={selectedReceipt?.imageUrl}
+        title={selectedReceipt?.title || "Receipt"}
+        onClose={() => setSelectedReceipt(null)}
+      />
+
+      <ConfirmDialog
+        title="Delete this purchase?"
+        message="This purchase and its associated receipt may be removed from the system."
+        confirmText={deletingId ? "Deleting..." : "Delete"}
+        cancelText="Cancel"
+        onConfirm={handleDeletePurchase}
+        onCancel={() => setDeleteTarget(null)}
+        isOpen={Boolean(deleteTarget)}
+      />
     </div>
   );
 }

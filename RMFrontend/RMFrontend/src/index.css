@@ -1,67 +1,68 @@
-body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  background: #f5f5f5;
+:root {
+  --bg: #f4f7fb;
+  --surface: #ffffff;
+  --surface-soft: #f7f9fc;
+  --primary: #1e68b8;
+  --primary-strong: #154d91;
+  --success: #0d9f6e;
+  --success-strong: #0a7d58;
+  --warning: #f5c66b;
+  --warning-strong: #d47d06;
+  --danger: #e15a63;
+  --danger-strong: #b92d3d;
+  --info: #2563eb;
+  --text: #14213d;
+  --muted: #5f6f89;
+  --border: #e7edf5;
+  --border-strong: #d9e2ec;
+  --shadow-soft: 0 16px 30px rgba(17, 24, 39, 0.06);
+  --radius-small: 12px;
+  --radius-medium: 18px;
+  --radius-large: 24px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --font-base: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }
 
-#root {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 40px 20px;
-}
-
-h1 {
-  margin-bottom: 5px;
-}
-
-form {
-  background: white;
-  padding: 25px;
-  border-radius: 10px;
-  margin-top: 20px;
-  margin-bottom: 30px;
-}
-
-input {
-  padding: 10px;
-  margin-top: 5px;
-  width: 300px;
-  max-width: 100%;
+* {
   box-sizing: border-box;
 }
 
-button {
-  padding: 10px 18px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  margin-right: 10px;
+html {
+  scroll-behavior: smooth;
 }
 
-.purchase-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(30, 104, 184, 0.08), transparent 30%),
+    linear-gradient(180deg, #f6f9fd 0%, #eff4f9 100%);
+  color: var(--text);
+  font-family: var(--font-base);
 }
 
-.purchase-card {
-  background: white;
-  padding: 20px;
-  border-radius: 10px;
+img {
+  max-width: 100%;
 }
 
-.warranty-alert {
-  background: white;
-  padding: 15px 20px;
-  border-radius: 10px;
-  margin-bottom: 20px;
-  border-left: 5px solid orange;
+button,
+input {
+  font: inherit;
 }
 
-.warranty-alert h2 {
-  margin-top: 0;
+#root {
+  min-height: 100vh;
 }
 
-.purchase-card h3 {
+h1,
+h2,
+h3,
+p {
   margin-top: 0;
 }

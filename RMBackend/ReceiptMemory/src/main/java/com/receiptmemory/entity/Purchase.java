@@ -1,23 +1,44 @@
 package com.receiptmemory.entity;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
-import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
+@Table(name = "purchases")
 public class Purchase {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(nullable = false)
     private String productName;
 
-    public Purchase(String productName, String storeName, double price, LocalDate purchaseDate, int warrantyMonths) {
-        this.productName = productName;
-        this.storeName = storeName;
-        this.price = price;
-        this.purchaseDate = purchaseDate;
-        this.warrantyMonths = warrantyMonths;
+    @Column(nullable = false)
+    private String storeName;
+
+    @Column(nullable = false, precision = 10, scale = 2)
+    private BigDecimal price;
+
+    @Column(nullable = false)
+    private LocalDate purchaseDate;
+
+    @Column(nullable = false)
+    private Integer warrantyMonths;
+
+    @Column(name = "receipt_image")
+    private String receiptImage;
+
+    @Column(name = "receipt_original_filename")
+    private String receiptOriginalFilename;
+
+    public Purchase() {
     }
 
     public Long getId() {
@@ -44,11 +65,11 @@ public class Purchase {
         this.storeName = storeName;
     }
 
-    public double getPrice() {
+    public BigDecimal getPrice() {
         return price;
     }
 
-    public void setPrice(double price) {
+    public void setPrice(BigDecimal price) {
         this.price = price;
     }
 
@@ -60,23 +81,13 @@ public class Purchase {
         this.purchaseDate = purchaseDate;
     }
 
-    public int getWarrantyMonths() {
+    public Integer getWarrantyMonths() {
         return warrantyMonths;
     }
 
-    public void setWarrantyMonths(int warrantyMonths) {
+    public void setWarrantyMonths(Integer warrantyMonths) {
         this.warrantyMonths = warrantyMonths;
     }
-
-    private String storeName;
-    private double price;
-    private LocalDate purchaseDate;
-
-    public Purchase() {
-    }
-
-    private int warrantyMonths;
-    private String receiptImage;
 
     public String getReceiptImage() {
         return receiptImage;
@@ -84,5 +95,13 @@ public class Purchase {
 
     public void setReceiptImage(String receiptImage) {
         this.receiptImage = receiptImage;
+    }
+
+    public String getReceiptOriginalFilename() {
+        return receiptOriginalFilename;
+    }
+
+    public void setReceiptOriginalFilename(String receiptOriginalFilename) {
+        this.receiptOriginalFilename = receiptOriginalFilename;
     }
 }
